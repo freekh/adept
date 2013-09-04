@@ -78,7 +78,7 @@ object Adept extends Logging {
   }
 
   //TODO: params here would be better if they were Seq[(Hash, Set[String])], Map[Hash, File]?
-  def artifact(baseDir: File, info: Seq[((Hash, Set[String]), Option[File])], timeout: FiniteDuration, progressIndicator: Option[ActorRef] = None) = { //TODO: return: Either[Seq[File], Seq[File]]  (left is failed, right is successful)
+  def download(baseDir: File, info: Seq[((Hash, Set[String]), Option[File])], timeout: FiniteDuration, progressIndicator: Option[ActorRef] = None) = { //TODO: return: Either[Seq[File], Seq[File]]  (left is failed, right is successful)
     val hashFiles = info.map {
       case ((hash, locations), dest) =>
         (hash, locations, dest.getOrElse {
@@ -108,7 +108,7 @@ object Adept extends Logging {
 
   private[adept]type FindModule = (Coordinates, Option[UniqueId], Set[Universe]) => Either[Set[Module], Option[Module]]
 
-  def build(repositories: Set[Adept], confExpr: String, module: Module,
+  def resolve(repositories: Set[Adept], confExpr: String, module: Module,
     configurationMapping: String => String = Configuration.defaultConfigurationMapping(_)): Option[Tree] = locked {
     val findModule = MergeOperations.mergeFindModules(repositories)
     TreeOperations.build(confExpr, module, configurationMapping, findModule).map { mutableTree =>

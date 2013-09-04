@@ -2,7 +2,7 @@ package adept.core.models
 
 import scala.collection.parallel.immutable.ParSet
 
-private[core] sealed class TreeLike[N <: NodeLike[N]](confExpr: String, root: NodeLike[N]) {
+private[core] sealed class TreeLike[N <: NodeLike[N]](confExpr: String, children: Set[_ <: NodeLike[N]]) {
   override def toString = {
     val indentSize = 2
     def artifactString(artifact: Artifact, indent: Int) = {
@@ -47,27 +47,27 @@ private[core] sealed class TreeLike[N <: NodeLike[N]](confExpr: String, root: No
         (if (evictedMissing.nonEmpty) "\n" + evictedMissing.map(missingEvictedDependencyString(_, indent)).mkString("", "\n", "") else "") +
         (if (n.children.nonEmpty) "\n" + n.children.map(childrenString(_, indent)).mkString("", "\n", "") else "")
     }
-
-    nodeString(root, indentSize)
+    
+    children.map(nodeString(_, indentSize)).mkString("\n")
   }
 
 }
 
-private[core] case class MutableTree(confExpr: String, root: MutableNode) extends TreeLike(confExpr, root) {
+private[core] case class MutableTree(confExpr: String, children: Set[MutableNode]) extends TreeLike(confExpr, children) {
   def toTree = {
-    Tree(confExpr, root.asImmutable)
+    Tree(confExpr, children.map(_.asImmutable))
   }
 
   //TODO: figure out how to get the signatures right on nodes, overrides, ... if this is in TreeLike
   def nodes: Set[MutableNode] = {
-    MutableTree.nodes(root)
+    children.flatMap(MutableTree.nodes(_))
   }
 
   def missing: Set[MissingDependency] = {
     def missing(node: MutableNode): Set[MissingDependency] = { //TODO: @tailrec?
       node.children.flatMap(missing).toSet ++ node.missingDependencies
     }
-    missing(root)
+    children.flatMap(missing)
   }
 }
 
@@ -77,9 +77,9 @@ private[core] object MutableTree {
   }
 }
 
-case class Tree(confExpr: String, root: Node) extends TreeLike(confExpr, root) {
+case class Tree(confExpr: String, children: Set[Node]) extends TreeLike(confExpr, children) {
   private[core] def toMutableTree = {
-    MutableTree(confExpr, root.asMutable)
+    MutableTree(confExpr, children.map(_.asMutable))
   }
 
   //TODO: figure out how to get the signatures right on nodes, overrides, ... if this is in TreeLike
@@ -87,13 +87,13 @@ case class Tree(confExpr: String, root: Node) extends TreeLike(confExpr, root) {
     def artifacts(node: Node): ParSet[Artifact] = { //TODO: @tailrec?
       node.children.par.flatMap(artifacts(_)) ++ node.artifacts
     }
-    artifacts(root).seq
+    children.flatMap(artifacts(_).seq)
   }
 
   def requiredMissing: Set[MissingDependency] = {
     def missing(node: Node): ParSet[MissingDependency] = { //TODO: @tailrec?
       node.children.par.flatMap(missing).toSet ++ node.missingDependencies.filter(!_.evicted)
     }
-    missing(root).seq
+    children.flatMap(missing(_).seq)
   }
 }

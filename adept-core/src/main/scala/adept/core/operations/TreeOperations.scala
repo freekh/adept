@@ -4,6 +4,7 @@ import adept.core.models._
 import adept.utils.Logging
 import collection.{ Set => _, _ }
 import adept.core.Adept
+import adept.utils.EitherUtils
 
 private[core] object TreeOperations extends Logging {
 
@@ -12,7 +13,7 @@ private[core] object TreeOperations extends Logging {
       node.evict(moduleReasons)
       node.children.foreach(evict)
     }
-    evict(tree.root)
+    tree.children.foreach(evict)
   }
 
   private def findNonTransitive(parent: Module, configurations: Set[Configuration], configurationMapping: String => String, findModule: Adept.FindModule) = {
@@ -57,13 +58,14 @@ private[core] object TreeOperations extends Logging {
     MutableNode(module = parent, configurations = matchedConfigurations, artifacts = foundArtifacts, children = dependentNodes.seq, evictedArtifacts = evictedArts, evictedModules = evictedModules, overriddenDependencies = mutable.Set.empty, missingDependencies = missingDependencies, postBuildInsertReason = None)
   }
 
-  def build(confExpr: String, module: Module, configurationMapping: String => String, findModule: Adept.FindModule): Option[MutableTree] = {
-    ConfigurationResolver.resolve(module.configurations, confExpr) match {
+  def build(confExpr: String, dependencies: Set[Dependency], universes: Set[Universe], moduleconfigurations: Set[Configuration], configurationMapping: String => String, findModule: Adept.FindModule): Either[Set[Dependency], MutableTree] = {
+    ConfigurationResolver.resolve(moduleconfigurations, confExpr) match {
       case Right(confs) =>
-        Some(MutableTree(confExpr, build(module, true, Set.empty, confs, configurationMapping, findModule)))
+        val children = dependencies.map(d => findModule(d.coordinates, d.uniqueId, universes)).toSeq 
+        Right(MutableTree(confExpr, EitherUtils.reduce(children).toSet))
       case Left(msg) =>
         logger.debug("no valid configurations found while building tree. " + msg)
-        None
+        Left(Set.empty)
     }
   }
 
